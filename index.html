@@ -1,0 +1,222 @@
+<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>ساحة القتال</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;font-family:Arial,sans-serif;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+html,body{width:100%;height:100%;direction:rtl;background:#0b0614;color:#f1e9ff}
+body{display:flex;align-items:center;justify-content:center}
+#app{width:100%;max-width:420px;padding:10px}
+.box{background:rgba(255,255,255,.05);border:2px solid rgba(255,90,110,.35);border-radius:18px;padding:18px;text-align:center}
+h1{font:900 24px Arial;color:#ff5a6e;margin-bottom:4px}
+.sub{font:600 11px Arial;color:#a99cc8;margin-bottom:14px}
+.bt{width:100%;height:50px;border:2px solid rgba(255,255,255,.2);border-radius:14px;font:900 15px Arial;color:#fff;background:linear-gradient(#ff5a6e,#c1243a 60%,#6e0f20);box-shadow:0 4px 0 rgba(0,0,0,.5);margin:6px 0}
+.bt.g{background:linear-gradient(#58c7ff,#1f7fd6 60%,#0a3a6e)}
+.bt:active{transform:translateY(3px);box-shadow:none}
+.or{font:700 11px Arial;color:#a99cc8;margin:10px 0 4px}
+input{width:100%;height:48px;border-radius:12px;border:2px solid rgba(88,199,255,.4);background:#150c26;color:#fff;font:900 22px Arial;text-align:center;letter-spacing:6px;direction:ltr}
+#st{margin-top:10px;font:700 13px Arial;min-height:20px;color:#ffd75e}
+#code{font:900 38px Arial;letter-spacing:8px;color:#58c7ff;direction:ltr}
+.gw{border:2px solid rgba(255,90,110,.35);border-radius:14px;overflow:hidden;background:#000;direction:ltr}
+canvas{width:100%;display:block;touch-action:none}
+.ctl{display:flex;justify-content:space-between;gap:8px;margin-top:10px;direction:ltr}
+.ctl div{display:flex;gap:8px}
+.pd{width:62px;height:56px;border:2px solid rgba(255,255,255,.18);border-radius:14px;font:900 20px Arial;color:#fff;background:linear-gradient(#58c7ff,#1f7fd6 60%,#0a3a6e);box-shadow:0 4px 0 rgba(0,0,0,.5);touch-action:none}
+.pd.a{background:linear-gradient(#ff5a6e,#c1243a 60%,#6e0f20)}
+.pd.b{background:linear-gradient(#ffd75e,#d69a1f 60%,#7a5208)}
+.pd.on{transform:translateY(3px);box-shadow:none;filter:brightness(1.4)}
+.hint{text-align:center;font:600 10px Arial;color:#a99cc8;margin-top:8px}
+</style></head><body>
+<div id="app">
+ <div id="menu" class="box">
+  <h1>⚔️ ساحة القتال</h1>
+  <div class="sub">قتال 1 ضد 1 · أفضل من 3 جولات</div>
+  <button class="bt" id="mk">🏠 إنشاء غرفة</button>
+  <div class="or">أو انضم لصاحبك بالايدي</div>
+  <input id="cd" maxlength="5" placeholder="•••••" inputmode="numeric">
+  <button class="bt g" id="jn">🔗 انضمام</button>
+  <div id="wait" hidden>
+   <div class="or">ايدي غرفتك — ارسله لصاحبك</div>
+   <div id="code">-----</div>
+   <button class="bt g" id="cp">📋 نسخ الايدي</button>
+  </div>
+  <div id="st"></div>
+ </div>
+ <div id="game" hidden>
+  <div class="gw"><canvas id="cv" width="400" height="260"></canvas></div>
+  <div class="ctl">
+   <div><button class="pd" data-k="l">◀</button><button class="pd" data-k="r">▶</button></div>
+   <div><button class="pd" data-k="j">⤒</button><button class="pd b" data-k="b">🛡️</button><button class="pd a" data-k="a">👊</button></div>
+  </div>
+  <div class="hint">◀ ▶ تحرك · ⤒ قفز · 🛡️ دفاع · 👊 ضربة (كيبورد: الأسهم / A D W / K J)</div>
+ </div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.4/peerjs.min.js"></script>
+<script>
+(function(){
+var $=function(i){return document.getElementById(i)};
+var cv=$('cv'),x=cv.getContext('2d'),W=400,H=260,GY=200,DPR=2;
+cv.width=W*DPR;cv.height=H*DPR;x.scale(DPR,DPR);
+var role=null,peer=null,conn=null,me=0,code='';
+var P,ph='wait',tm=0,wn=-1,rt=0,IN=[{},{}],my={l:0,r:0,j:0,a:0,b:0},fr=0;
+
+function st(t){$('st').textContent=t||''}
+function mk(px,f){return{x:px,y:GY,vy:0,hp:100,f:f,at:0,cd:0,bl:0,hit:0,w:0}}
+function newMatch(){P=[mk(90,1),mk(310,-1)];startRound()}
+function startRound(){
+ P.forEach(function(p,i){p.x=i?310:90;p.y=GY;p.vy=0;p.hp=100;p.at=0;p.cd=0;p.bl=0;p.hit=0;p.f=i?-1:1});
+ ph='ready';tm=90;wn=-1;rt=3600;
+}
+function endRound(w){
+ wn=w;if(w>=0)P[w].w++;
+ if(w>=0&&P[w].w>=2){ph='over'}else{ph='round';tm=110}
+}
+function step(){
+ if(ph==='ready'){if(--tm<=0)ph='fight';return}
+ if(ph==='round'){if(--tm<=0)startRound();return}
+ if(ph!=='fight')return;
+ rt--;
+ for(var i=0;i<2;i++){
+  var p=P[i],o=P[1-i],n=IN[i]||{};
+  if(p.hit>0)p.hit--;if(p.cd>0)p.cd--;
+  p.bl=(n.b&&p.at<=0&&p.y>=GY&&p.hit<=0)?1:0;
+  p.f=o.x>p.x?1:-1;
+  if(!p.bl&&p.hit<=0){
+   p.x+=((n.r?1:0)-(n.l?1:0))*3.2;
+   if(n.j&&p.y>=GY)p.vy=-9.5;
+  }
+  p.x=Math.max(20,Math.min(380,p.x));
+  p.vy+=.5;p.y+=p.vy;if(p.y>=GY){p.y=GY;p.vy=0}
+  if(n.a&&p.cd<=0&&!p.bl&&p.hit<=0){p.at=12;p.cd=26}
+  if(p.at>0){
+   if(p.at===7){
+    var d=(o.x-p.x)*p.f;
+    if(d>-6&&d<48&&Math.abs(o.y-p.y)<34){
+     o.hp-=o.bl?2:8;
+     o.x+=p.f*(o.bl?5:15);
+     if(!o.bl)o.hit=12;
+    }
+   }
+   p.at--;
+  }
+ }
+ var d0=P[0].hp<=0,d1=P[1].hp<=0;
+ if(d0||d1)endRound(d0&&d1?-1:(d0?1:0));
+ else if(rt<=0)endRound(P[0].hp===P[1].hp?-1:(P[0].hp>P[1].hp?0:1));
+}
+
+/* ---------- الشبكة ---------- */
+function send(o){try{if(conn&&conn.open)conn.send(o)}catch(e){}}
+function setIn(k,v){
+ if(my[k]===v)return;my[k]=v;
+ if(role==='h')IN[0]=my;else send({i:my});
+}
+function onData(d){
+ if(role==='h'){
+  if(d.i)IN[1]=d.i;
+  if(d.rm&&ph==='over')newMatch();
+ }else if(d.s){P=d.s.P;ph=d.s.ph;tm=d.s.tm;wn=d.s.wn;rt=d.s.rt}
+}
+function begin(){
+ $('menu').hidden=true;$('game').hidden=false;
+ if(role==='h'){me=0;newMatch()}else{me=1;P=[mk(90,1),mk(310,-1)]}
+ requestAnimationFrame(loop);
+}
+function setup(c){
+ conn=c;
+ c.on('open',function(){begin()});
+ c.on('data',onData);
+ c.on('close',function(){ph='wait';st('انقطع الاتصال ❌');$('menu').hidden=false;$('game').hidden=true;location.reload()});
+}
+function host(){
+ role='h';code=String(Math.floor(10000+Math.random()*90000));
+ st('جاري إنشاء الغرفة...');
+ peer=new Peer('obfgt'+code);
+ peer.on('open',function(){$('code').textContent=code;$('wait').hidden=false;$('mk').hidden=true;st('بانتظار صاحبك ينضم... ⏳')});
+ peer.on('connection',function(c){if(conn)return;setup(c)});
+ peer.on('error',function(e){if(e.type==='unavailable-id'){peer.destroy();host()}else st('خطأ: '+e.type)});
+}
+function join(){
+ var v=$('cd').value.replace(/\D/g,'');
+ if(v.length!==5)return st('ادخل ايدي من 5 أرقام');
+ role='g';st('جاري الاتصال...');
+ peer=new Peer();
+ peer.on('open',function(){
+  setup(peer.connect('obfgt'+v,{reliable:true}));
+  setTimeout(function(){if(!conn.open)st('ما لقيت الغرفة، تأكد من الايدي ❌')},9000);
+ });
+ peer.on('error',function(e){st(e.type==='peer-unavailable'?'الغرفة غير موجودة ❌':'خطأ: '+e.type)});
+}
+$('mk').onclick=host;$('jn').onclick=join;
+$('cp').onclick=function(){try{navigator.clipboard.writeText(code);st('تم النسخ ✅')}catch(e){}};
+function tap(){
+ if(ph==='over'){if(role==='h')newMatch();else send({rm:1})}
+}
+cv.addEventListener('pointerdown',tap);
+
+/* ---------- التحكم ---------- */
+document.querySelectorAll('.pd').forEach(function(b){
+ var k=b.dataset.k;
+ function on(e){e.preventDefault();b.classList.add('on');setIn(k,1)}
+ function off(e){e.preventDefault();b.classList.remove('on');setIn(k,0)}
+ b.addEventListener('pointerdown',on);
+ ['pointerup','pointerleave','pointercancel'].forEach(function(t){b.addEventListener(t,off)});
+ b.addEventListener('contextmenu',function(e){e.preventDefault()});
+});
+var KM={ArrowLeft:'l',a:'l',ArrowRight:'r',d:'r',ArrowUp:'j',w:'j',k:'a',' ':'a',j:'b',s:'b',ArrowDown:'b'};
+addEventListener('keydown',function(e){var k=KM[e.key];if(k){e.preventDefault();setIn(k,1)}});
+addEventListener('keyup',function(e){var k=KM[e.key];if(k){e.preventDefault();setIn(k,0)}});
+setInterval(function(){if(role==='g')send({i:my})},120);
+
+/* ---------- الرسم ---------- */
+function fig(p,c,mine){
+ x.save();x.translate(p.x,p.y);
+ var col=p.hit>0?'#fff':c;
+ x.strokeStyle=col;x.fillStyle=col;x.lineWidth=5;x.lineCap='round';
+ x.beginPath();x.moveTo(0,-22);x.lineTo(-7,0);x.moveTo(0,-22);x.lineTo(7,0);x.moveTo(0,-22);x.lineTo(0,-48);
+ x.moveTo(0,-42);
+ if(p.bl){x.lineTo(p.f*12,-50);x.lineTo(p.f*8,-62)}
+ else if(p.at>0)x.lineTo(p.f*34,-44);
+ else x.lineTo(p.f*12,-30);
+ x.stroke();
+ x.beginPath();x.arc(0,-58,10,0,7);x.fill();
+ if(p.bl){x.strokeStyle='rgba(255,215,94,.8)';x.lineWidth=4;x.beginPath();x.arc(0,-34,26,p.f>0?-1.1:Math.PI-1.1+0,p.f>0?1.1:Math.PI+1.1);x.stroke()}
+ if(mine){x.fillStyle='#ffd75e';x.font='900 10px Arial';x.textAlign='center';x.fillText('▼ أنت',0,-76)}
+ x.restore();
+}
+function bar(i){
+ var p=P[i],bw=150,bx=i?W-10-bw:10,pc=Math.max(0,p.hp)/100;
+ x.fillStyle='rgba(255,255,255,.12)';x.fillRect(bx,12,bw,12);
+ x.fillStyle=pc>.35?'#4be37a':'#ff5a6e';
+ var fw=bw*pc;x.fillRect(i?bx+bw-fw:bx,12,fw,12);
+ x.fillStyle=i?'#ff8aa0':'#7fd2ff';
+ for(var k=0;k<2;k++){x.beginPath();x.arc(i?bx+bw-6-k*14:bx+6+k*14,36,5,0,7);k<p.w?x.fill():(x.globalAlpha=.25,x.fill(),x.globalAlpha=1)}
+}
+function draw(){
+ var g=x.createLinearGradient(0,0,0,H);g.addColorStop(0,'#2a0f3d');g.addColorStop(1,'#0b0614');
+ x.fillStyle=g;x.fillRect(0,0,W,H);
+ x.fillStyle='rgba(255,90,110,.12)';x.fillRect(0,GY,W,H-GY);
+ x.strokeStyle='rgba(255,90,110,.5)';x.lineWidth=2;x.beginPath();x.moveTo(0,GY);x.lineTo(W,GY);x.stroke();
+ if(!P)return;
+ fig(P[0],'#58c7ff',me===0);fig(P[1],'#ff5a6e',me===1);
+ bar(0);bar(1);
+ x.textAlign='center';x.fillStyle='#ffd75e';x.font='900 13px Arial';
+ x.fillText(Math.max(0,Math.ceil(rt/60)),W/2,22);
+ var t='',s='';
+ if(ph==='ready'){t=tm>45?'استعد!':(tm>15?'جاهز؟':'قاتل! ⚔️')}
+ else if(ph==='round'){t=wn<0?'تعادل 🤝':(wn===me?'فزت بالجولة ✅':'خسرت الجولة ❌')}
+ else if(ph==='over'){
+  x.fillStyle='rgba(11,6,20,.7)';x.fillRect(0,0,W,H);
+  t=wn===me?'🏆 فزت بالمباراة!':'💀 خسرت المباراة';
+  s=role==='h'?'المس للعب مرة ثانية 🔄':'المس لطلب إعادة 🔄';
+ }
+ if(t){x.fillStyle=ph==='over'?'#ffd75e':'#fff';x.font='900 24px Arial';x.fillText(t,W/2,110)}
+ if(s){x.fillStyle='#fff';x.font='700 12px Arial';x.fillText(s,W/2,140)}
+ x.textAlign='left';
+}
+function loop(){
+ fr++;
+ if(role==='h'){step();if(fr%2===0)send({s:{P:P,ph:ph,tm:tm,wn:wn,rt:rt}})}
+ draw();requestAnimationFrame(loop);
+}
+})();
+</script></body></html>
